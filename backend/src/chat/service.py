@@ -371,10 +371,10 @@ class ChatService:
                 )
 
         if not conversation_history:
-            recent_db_msgs = await self.repo.get_recent_messages(
-                chat.id, limit=7
+            ticket_db_msgs = await self.repo.get_messages_by_ticket_id(
+                active_ticket.id
             )
-            for m in recent_db_msgs:
+            for m in ticket_db_msgs:
                 if m.id == client_message.id:
                     continue
                 sender_role = (
@@ -559,22 +559,26 @@ class ChatService:
             return
 
         # 5. Полноценный запуск RAG с контекстом диалога
-        effective_query = (
-            route_output.standalone_query.strip()
-            if getattr(route_output, "standalone_query", None)
+        effective_query = payload.text
+        if (
+            getattr(route_output, "standalone_query", None)
             and route_output.standalone_query.strip()
-            else payload.text
-        )
-        bot_message_id = uuid6.uuid7()
-        rag_request = RagQueryRequestSchema(
-            query=effective_query,
-            message_id=bot_message_id,
-            conversation_history=conversation_history,
-        )
+            and not route_output.standalone_query.startswith("ИСТОРИЯ ДИАЛОГА")
+        ):
+            effective_query = route_output.standalone_query.strip()
 
+        if len(effective_query) > 4000:
+            effective_query = effective_query[:4000]
+
+        bot_message_id = uuid6.uuid7()
         collected_sources: list[RagSourceChunkSchema] = []
 
         try:
+            rag_request = RagQueryRequestSchema(
+                query=effective_query,
+                message_id=bot_message_id,
+                conversation_history=conversation_history,
+            )
             async for event in self.rag_service.generate_answer(rag_request):
                 if isinstance(event, RagSourcesEventSchema):
                     collected_sources.extend(event.sources)
@@ -998,10 +1002,10 @@ class ChatService:
                 )
 
         if not conversation_history:
-            recent_db_msgs = await self.repo.get_recent_messages(
-                chat.id, limit=8
+            ticket_db_msgs = await self.repo.get_messages_by_ticket_id(
+                active_ticket.id
             )
-            for m in recent_db_msgs:
+            for m in ticket_db_msgs[-8:]:
                 sender_role = (
                     "user"
                     if m.sender_type == MessageSenderType.CLIENT

@@ -9,10 +9,10 @@ x-backend-base: &backend-base
     DB_HOST: postgres
     REDIS_HOST: redis
     QDRANT_HOST: qdrant
-    OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://100.65.5.123:9117}
     KB_STORAGE_DIR: /data/kb_documents
     ENABLE_LOCAL_NEURAL_EMBEDDINGS: ${ENABLE_LOCAL_NEURAL_EMBEDDINGS:-true}
   volumes:
+    - ./backend/.env:/app/.env:ro
     - ./backend/src:/app/src
     - ./backend/alembic:/app/alembic
     - ./artifacts_export:/app/artifacts_export:ro
@@ -96,7 +96,7 @@ services:
     container_name: rag_api
     ports:
       - "8000:8000"
-    command: ["sh", "-c", "alembic upgrade head && python -m src.db.seed_demo && python -m src.kb.seed && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"]
+    command: ["sh", "-c", "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"]
 
   worker:
     <<: *backend-base

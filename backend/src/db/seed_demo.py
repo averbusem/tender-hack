@@ -268,7 +268,7 @@ async def seed() -> None:
             admin_profile = OperatorProfileModel(
                 user_id=admin_user.id,
                 line_id=lines["L1"].id,
-                shift_status=OperatorShiftStatus.ACTIVE,
+                shift_status=OperatorShiftStatus.OFFLINE,
                 max_slots=10,
             )
             session.add(admin_profile)
@@ -280,7 +280,7 @@ async def seed() -> None:
             admin_profile = (await session.scalars(stmt_adm_prof)).first()
             if admin_profile:
                 admin_profile.line_id = lines["L1"].id
-                admin_profile.shift_status = OperatorShiftStatus.ACTIVE
+                admin_profile.shift_status = OperatorShiftStatus.OFFLINE
 
         # Сидирование 30 демонстрационных обращений поставщиков по методичкам
         stmt_t_count = select(func.count(TicketModel.id)).where(

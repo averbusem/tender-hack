@@ -7,6 +7,7 @@ from uuid import UUID
 
 from qdrant_client import AsyncQdrantClient
 
+from src.core.config import settings
 from src.core.qdrant_client import get_qdrant_client
 from src.operators.schemas import (
     CopilotSummaryResponseSchema,
@@ -158,20 +159,26 @@ class MockCopilotLlmClient:
 class OllamaCopilotLlmClient:
     """Боевой клиент генерации подсказок Copilot через Ollama со страховочным резервом."""
 
-    DEFAULT_TIMEOUT: float = 4.0
+    DEFAULT_TIMEOUT: float = 60.0
 
     def __init__(
         self,
         llm_client: Any | None = None,
         fallback_client: CopilotLlmClientProtocol | None = None,
-        timeout: float = 4.0,
+        timeout: float | None = None,
     ) -> None:
         """Инициализирует клиент инференса Ollama и резервную заглушку."""
         from src.core.llm_client import get_llm_stream_client
 
         self.llm_client = llm_client or get_llm_stream_client()
         self.fallback_client = fallback_client or MockCopilotLlmClient()
-        self.timeout = timeout
+        self.timeout = (
+            timeout
+            if timeout is not None
+            else getattr(
+                settings, "OLLAMA_TIMEOUT_SECONDS", self.DEFAULT_TIMEOUT
+            )
+        )
 
     @staticmethod
     def _normalize_line_code(value: Any) -> Literal["L1", "L2", "L3"]:
@@ -245,18 +252,26 @@ class OllamaCopilotLlmClient:
 class CopilotService:
     """Сервис формирования аналитической подсказки оператора и подбора прецедентов."""
 
-    DEFAULT_TIMEOUT: float = 4.0
+    DEFAULT_TIMEOUT: float = 60.0
 
     def __init__(
         self,
         llm_client: CopilotLlmClientProtocol | None = None,
         qdrant_client: AsyncQdrantClient | None = None,
-        timeout: float = 4.0,
+        timeout: float | None = None,
     ) -> None:
         """Инициализирует сервис клиентом LLM и клиентом Qdrant."""
-        self.timeout = timeout
+        self.timeout = (
+            timeout
+            if timeout is not None
+            else getattr(
+                settings, "OLLAMA_TIMEOUT_SECONDS", self.DEFAULT_TIMEOUT
+            )
+        )
         self.fallback_client = MockCopilotLlmClient()
-        self.llm_client = llm_client or OllamaCopilotLlmClient(timeout=timeout)
+        self.llm_client = llm_client or OllamaCopilotLlmClient(
+            timeout=self.timeout
+        )
         self.qdrant_client = qdrant_client
 
     def _format_conversation(self, messages: list[dict[str, Any]]) -> str:

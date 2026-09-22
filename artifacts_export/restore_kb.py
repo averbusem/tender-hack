@@ -75,23 +75,47 @@ def restore_qdrant(qdrant_url="http://localhost:6333", collection_name="tender_c
     curr_dir = Path(__file__).parent.resolve()
     snapshot_file = curr_dir / "tender_chunks.snapshot"
 
-    import urllib.request
-
-    # Загрузка и восстановление через Qdrant Snapshots API
     upload_url = f"{qdrant_url}/collections/{collection_name}/snapshots/upload?priority=snapshot"
-    print(f"   Отправка POST {upload_url}...")
 
+    # Удаляем несовместимую пустую коллекцию, если она уже создана
     try:
-        with open(snapshot_file, "rb") as f:
-            req = urllib.request.Request(
-                upload_url,
-                data=f.read(),
-                headers={"Content-Type": "application/octet-stream"},
-                method="POST"
-            )
-            with urllib.request.urlopen(req) as resp:
-                result = resp.read().decode("utf-8")
-                print(f"   [УСПЕХ] Коллекция {collection_name} успешно восстановлена в Qdrant!")
+        if httpx:
+            with httpx.Client(timeout=10.0) as client:
+                client.delete(f"{qdrant_url}/collections/{collection_name}")
+        else:
+            import urllib.request
+            req = urllib.request.Request(f"{qdrant_url}/collections/{collection_name}", method="DELETE")
+            urllib.request.urlopen(req)
+    except Exception:
+        pass
+
+    # Загрузка через multipart/form-data
+    print(f"   Отправка POST {upload_url}...")
+    try:
+        if httpx:
+            with open(snapshot_file, "rb") as f:
+                with httpx.Client(timeout=120.0) as client:
+                    resp = client.post(
+                        upload_url,
+                        files={"snapshot": (snapshot_file.name, f, "application/octet-stream")}
+                    )
+                    resp.raise_for_status()
+                    print(f"   [УСПЕХ] Коллекция {collection_name} успешно восстановлена в Qdrant!")
+                    return
+    except Exception as exc:
+        print(f"   [ВНИМАНИЕ] Не удалось загрузить через httpx ({exc}), попытка через curl...")
+
+    # Фолбэк на системный curl
+    cmd_curl = [
+        "curl", "-s", "-X", "POST", upload_url,
+        "-F", f"snapshot=@{snapshot_file}"
+    ]
+    try:
+        proc = subprocess.run(cmd_curl, capture_output=True, text=True)
+        if proc.returncode == 0 and '"status":"ok"' in proc.stdout:
+            print(f"   [УСПЕХ] Коллекция {collection_name} успешно восстановлена в Qdrant через curl!")
+        else:
+            print(f"   [ОШИБКА] Вывод curl: {proc.stdout or proc.stderr}")
     except Exception as exc:
         print(f"   [ОШИБКА] Не удалось восстановить снапшот в Qdrant: {exc}")
 
